@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GIS Interactive Infrastructure Project Dashboard</title>
+    
+    <!-- Leaflet GIS CSS Mapping Framework -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif; background: #0f0f15; color: #e0e0e0; display: flex; height: 100vh; overflow: hidden; }
+        
+        /* Layout Structure */
+        #sidebar { width: 360px; background: #14141e; border-right: 1px solid #252535; display: flex; flex-direction: column; z-index: 1000; }
+        #map { flex-grow: 1; height: 100%; background: #0a0a0f; }
+        
+        /* Header & Search Controls */
+        .sidebar-header { padding: 20px; background: #1a1a28; border-bottom: 1px solid #252535; }
+        .sidebar-header h1 { font-size: 18px; font-weight: 700; color: #fff; letter-spacing: 0.5px; margin-bottom: 4px; }
+        .sidebar-header p { font-size: 12px; color: #8a8a9e; }
+        
+        .search-container { padding: 15px 20px; border-bottom: 1px solid #252535; }
+        .search-input { width: 100%; padding: 10px 12px; background: #0b0b10; border: 1px solid #2d2d3f; border-radius: 6px; color: #fff; font-size: 13px; outline: none; transition: border 0.2s; }
+        .search-input:focus { border-color: #00ADD0; }
+        
+        /* Filter Chips */
+        .filter-chips { display: flex; gap: 6px; overflow-x: auto; padding: 10px 20px; border-bottom: 1px solid #252535; scrollbar-width: none; }
+        .filter-chips::-webkit-scrollbar { display: none; }
+        .chip { padding: 5px 12px; background: #1e1e2d; border: 1px solid #2d2d3f; border-radius: 14px; font-size: 11px; font-weight: 600; color: #a0a0b5; cursor: pointer; white-space: nowrap; transition: all 0.2s; }
+        .chip.active, .chip:hover { background: #00ADD0; color: #fff; border-color: #00ADD0; }
+        
+        /* Project Cards List */
+        .project-list { flex-grow: 1; overflow-y: auto; padding: 15px 20px; }
+        .project-card { background: #1a1a26; border: 1px solid #262638; border-radius: 8px; padding: 14px; margin-bottom: 12px; cursor: pointer; transition: all 0.2s; }
+        .project-card:hover { border-color: #00ADD0; transform: translateY(-1px); }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .card-id { font-family: monospace; font-size: 13px; font-weight: 700; color: #fff; }
+        .badge { padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; color: #fff; text-transform: uppercase; }
+        .card-title { font-size: 13px; color: #c5c5d8; font-weight: 600; margin-bottom: 4px; }
+        .card-sub { font-size: 11px; color: #7a7a92; }
+        
+        /* Popup Styling */
+        .leaflet-popup-content-wrapper { background: #14141e; color: #e0e0e0; border: 1px solid #2d2d3f; border-radius: 8px; padding: 4px; }
+        .leaflet-popup-tip { background: #14141e; border: 1px solid #2d2d3f; }
+        .popup-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #262638; }
+        .popup-badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; color: #fff; }
+        .popup-title { font-size: 14px; font-weight: 700; color: #fff; }
+        .popup-id { font-size: 11px; color: #8a8a9e; font-family: monospace; }
+        .popup-row { font-size: 12px; margin-bottom: 6px; }
+        .popup-row-label { color: #8a8a9e; font-size: 10px; text-transform: uppercase; font-weight: 700; }
+        .popup-row-val { color: #fff; font-weight: 500; }
+    </style>
+</head>
+<body>
+
+    <!-- Sidebar Dashboard Controls -->
+    <div id="sidebar">
+        <div class="sidebar-header">
+            <h1>Infrastructure Map</h1>
+            <p>GIS Geospatial Boundary Dashboard</p>
+        </div>
+        
+        <div class="search-container">
+            <input type="text" id="searchInput" class="search-input" placeholder="Search by Project ID, Client, or Agency..." onkeyup="filterProjects()">
+        </div>
+        
+        <div class="filter-chips" id="agencyChips">
+            <!-- Dynamic agency filter chips injected here -->
+        </div>
+        
+        <div class="project-list" id="projectList">
+            <!-- Project cards rendered here -->
+        </div>
+    </div>
+
+    <!-- Leaflet Interactive Map Viewport -->
+    <div id="map"></div>
+
+    <!-- Leaflet JS Framework -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        // -------------------------------------------------------------------------
+        // 1. AGENCY LAYER CONFIGURATION & PALETTE RULES
+        // -------------------------------------------------------------------------
+        const LINES = [
+            { "id": "A", "label": "A", "color": "#0039A6", "name": "DEP", "desc": "Agency Layer: DEP" },
+            { "id": "B", "label": "B", "color": "#FF6319", "name": "DDC", "desc": "Agency Layer: DDC" },
+            { "id": "C", "label": "C", "color": "#6CBE45", "name": "NYSDOT", "desc": "Agency Layer: NYSDOT" },
+            { "id": "D", "label": "D", "color": "#B933AD", "name": "MTA", "desc": "Agency Layer: MTA" },
+            { "id": "E", "label": "E", "color": "#00ADD0", "name": "NYCDOT", "desc": "Agency Layer: NYCDOT" },
+            { "id": "F", "label": "F", "color": "#EE352E", "name": "PANYNJ", "desc": "Agency Layer: PANYNJ" },
+            { "id": "G", "label": "G", "color": "#00933C", "name": "NJDOT", "desc": "Agency Layer: NJDOT" },
+            { "id": "H", "label": "H", "color": "#B35100", "name": "NJTRANSIT", "desc": "Agency Layer: NJTRANSIT" },
+            { "id": "I", "label": "I", "color": "#FFD500", "name": "GSP", "desc": "Agency Layer: GSP" },
+            { "id": "J", "label": "J", "color": "#A7A9AC", "name": "NJTP", "desc": "Agency Layer: NJTP" },
+            { "id": "K", "label": "K", "color": "#4A90E2", "name": "EDC", "desc": "Agency Layer: EDC" },
+            { "id": "L", "label": "L", "color": "#9013FE", "name": "DPR", "desc": "Agency Layer: DPR" }
+        ];
+
+        // -------------------------------------------------------------------------
+        // 2. PROJECT DATABASE ARRAY (Sanitized Portfolio Demo Data)
+        // -------------------------------------------------------------------------
+        const PROJECTS = [
+            {
+                "id": "12345.11",
+                "name": "12345.11",
+                "agency": "DEP",
+                "client": "Wayne Enterprises",
+                "projType": "Subsurface Utility Survey",
+                "year": "2024",
+                "line": "A",
+                "center": [40.7128, -74.0060],
+                "features": [
+                    {
+                        "name": "12345.11",
+                        "type": "area",
+                        "coords": [
+                            [40.7128, -74.0060],
+                            [40.7138, -74.0050],
+                            [40.7118, -74.0040],
+                            [40.7128, -74.0060]
+                        ]
+                    }
+                ],
+                "placemark_count": 1,
+                "folder_path": "C:\\MockProjects\\12345.11_Wayne_Enterprises"
+            },
+            {
+                "id": "48999.87",
+                "name": "48999.87",
+                "agency": "DDC",
+                "client": "Stark Industries",
+                "projType": "Topographic Mapping",
+                "year": "2025",
+                "line": "B",
+                "center": [40.7589, -73.9851],
+                "features": [
+                    {
+                        "name": "48999.87",
+                        "type": "area",
+                        "coords": [
+                            [40.7589, -73.9851],
+                            [40.7599, -73.9841],
+                            [40.7579, -73.9831],
+                            [40.7589, -73.9851]
+                        ]
+                    }
+                ],
+                "placemark_count": 1,
+                "folder_path": "C:\\MockProjects\\48999.87_Stark_Industries"
+            }
+        ];
+
+        // -------------------------------------------------------------------------
+        // 3. INITIALIZE LEAFLET MAP INSTANCE
+        // -------------------------------------------------------------------------
+        const map = L.map('map').setView([40.730610, -73.935242], 11);
+
+        // Dark Matter Basemap Tiles
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+            maxZoom: 19
+        }).addTo(map);
+
+        let activeLayers = [];
+        let activeFilter = "All";
+
+        function getLine(lineId) {
+            return LINES.find(l => l.id === lineId) || { label: "?", color: "#888", name: "Unknown" };
+        }
+
+        // -------------------------------------------------------------------------
+        // 4. POPUP MARKUP BUILDER WITH CLIPBOARD COPY API
+        // -------------------------------------------------------------------------
+        function popupHTML(p, featureName) {
+            var line = getLine(p.line);
+            var rows = '';
+            
+            rows += '<div class="popup-row"><div class="popup-row-label">Agency</div><div class="popup-row-val">' + p.agency + '</div></div>';
+            if (p.client) rows += '<div class="popup-row"><div class="popup-row-label">Client</div><div class="popup-row-val">' + p.client + '</div></div>';
+            if (p.projType) rows += '<div class="popup-row"><div class="popup-row-label">Project Type</div><div class="popup-row-val">' + p.projType + '</div></div>';
+            if (p.year) rows += '<div class="popup-row"><div class="popup-row-label">Year</div><div class="popup-row-val">' + p.year + '</div></div>';
+            
+            // IT-Approved copy-to-clipboard framework replacing absolute browser file:// links
+            if (p.folder_path) {
+                var escapedPath = p.folder_path.replace(/\\/g, '\\\\');
+                rows += '<div class="popup-row" style="display: flex; flex-direction: column; gap: 4px; margin-top: 8px;">' +
+                          '<div class="popup-row-label">Project Directory Path</div>' +
+                          '<div style="display: flex; gap: 4px; width: 100%; box-sizing: border-box;">' +
+                            '<input type="text" value="' + p.folder_path + '" readonly ' +
+                                   'style="flex-grow: 1; font-size: 11px; font-family: monospace; background: #0b0b10; color: #fff; border: 1px solid #2d2d3f; padding: 4px 6px; border-radius: 3px;">' +
+                            '<button onclick="navigator.clipboard.writeText(\'' + escapedPath + '\').then(() => alert(\'Folder path copied to clipboard!\\nYou can now paste it into Windows File Explorer.\'))" ' +
+                                    'style="font-size: 11px; font-weight: bold; background: #0039A6; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer; white-space: nowrap;">' +
+                              'Copy' +
+                            '</button>' +
+                          '</div>' +
+                        '</div>';
+            }
+
+            var subtitle = p.id + (featureName && featureName !== p.id ? ' &mdash; ' + featureName : '') + ' &middot; ' + line.name;
+            
+            return '<div class="popup-header">' +
+                     '<div class="popup-badge" style="background:' + line.color + '">' + line.label + '</div>' +
+                     '<div><div class="popup-title">' + p.name + '</div>' +
+                     '<div class="popup-id">' + subtitle + '</div></div>' +
+                   '</div>' +
+                   '<div class="popup-body">' + rows + '</div>';
+        }
+
+        // -------------------------------------------------------------------------
+        // 5. RENDER GEOMETRIES & SIDEBAR
+        // -------------------------------------------------------------------------
+        function renderMapAndSidebar() {
+            // Clear existing map layers
+            activeLayers.forEach(l => map.removeLayer(l));
+            activeLayers = [];
+
+            const projectList = document.getElementById('projectList');
+            projectList.innerHTML = '';
+
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+
+            PROJECTS.forEach(proj => {
+                const line = getLine(proj.line);
+                
+                // Filter matches
+                const matchesAgency = (activeFilter === "All" || proj.agency === activeFilter);
+                const matchesSearch = proj.id.toLowerCase().includes(searchTerm) || 
+                                      proj.client.toLowerCase().includes(searchTerm) || 
+                                      proj.agency.toLowerCase().includes(searchTerm);
+
+                if (matchesAgency && matchesSearch) {
+                    // Render Polygon Features
+                    proj.features.forEach(feat => {
+                        if (feat.type === "area") {
+                            const poly = L.polygon(feat.coords, {
+                                color: line.color,
+                                fillColor: line.color,
+                                fillOpacity: 0.35,
+                                weight: 2
+                            }).addTo(map);
+
+                            poly.bindPopup(popupHTML(proj, feat.name));
+                            activeLayers.push(poly);
+                        }
+                    });
+
+                    // Render Sidebar Card
+                    const card = document.createElement('div');
+                    card.className = 'project-card';
+                    card.innerHTML = `
+                        <div class="card-header">
+                            <span class="card-id">${proj.id}</span>
+                            <span class="badge" style="background:${line.color}">${proj.agency}</span>
+                        </div>
+                        <div class="card-title">${proj.client}</div>
+                        <div class="card-sub">${proj.projType} &middot; ${proj.year}</div>
+                    `;
+                    card.onclick = () => {
+                        map.flyTo(proj.center, 15, { duration: 1.2 });
+                    };
+                    projectList.appendChild(card);
+                }
+            });
+        }
+
+        // -------------------------------------------------------------------------
+        // 6. RENDER FILTER CHIPS
+        // -------------------------------------------------------------------------
+        function renderChips() {
+            const chipsContainer = document.getElementById('agencyChips');
+            const agencies = ['All', ...HARDCODED_AGENCY_LIST = ['All', 'DEP', 'DDC', 'NYSDOT', 'MTA', 'NYCDOT', 'PANYNJ', 'NJDOT', 'NJTRANSIT', 'GSP', 'NJTP', 'EDC', 'DPR']];
+            
+            chipsContainer.innerHTML = '';
+            agencies.forEach(ag => {
+                const chip = document.createElement('div');
+                chip.className = `chip ${ag === activeFilter ? 'active' : ''}`;
+                chip.innerText = ag;
+                chip.onclick = () => {
+                    activeFilter = ag;
+                    renderChips();
+                    renderMapAndSidebar();
+                };
+                chipsContainer.appendChild(chip);
+            });
+        }
+
+        function filterProjects() {
+            renderMapAndSidebar();
+        }
+
+        // Boot Initialization
+        renderChips();
+        renderMapAndSidebar();
+    </script>
+</body>
+</html>
