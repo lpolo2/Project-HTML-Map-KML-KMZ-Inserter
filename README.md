@@ -5,7 +5,7 @@ A Python and Leaflet.js automation tool designed to streamline the ingestion of 
 ## Key Features
 
 *   **Automated Spatial Extraction:** Parses raw XML/KML geometry structures (polygons, lines, and center points) and translates them into clean GeoJSON feature layers.
-*   **Duplicate Detection:** Features a two-pass validation system that verifies strict corporate 5-digit ID naming conventions and evaluates coordinate geometries to prevent overlapping GIS boundary entries.
+*   **Duplicate Detection:** Features a two-pass validation system that verifies 5-digit ID naming conventions and evaluates coordinate geometries to prevent overlapping GIS boundary entries.
 *   **Dynamic UI Builder:** Injects real-time spatial layers, updates Leaflet layer configurations, and syncs search filter chips without manual code edits.
 *   **Enterprise-Safe Navigation:** Built-in clipboard integration that allows users to seamlessly copy network file directory paths directly to the native OS file explorer.
 *   **Documentation Pipeline:** Automatically compiles clean, multi-page corporate PDF technical manuals using ReportLab.
